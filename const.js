@@ -1,0 +1,22 @@
+export const topVisitedCitiesInEurope = [
+    "London",
+    "Paris",
+    "Rome",
+    "Istanbul",
+    "Barcelona",
+    "Amsterdam",
+    "Milan",
+    "Vienna",
+    "Prague",
+    "Berlin",
+    "Madrid",
+    "Lisbon",
+    "Munich",
+    "Venice",
+    "Florence",
+    "Budapest",
+    "Dublin",
+    "Copenhagen",
+    "Brussels",
+    "Athens"
+];

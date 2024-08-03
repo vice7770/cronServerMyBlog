@@ -6,6 +6,7 @@ import path from "path";
 import cron from 'node-cron';
 import initializeDb from "./api/services/weather.js";
 import upsertWeatherData from "./api/services/queryWeather.js";
+import moveYesterdayData from "./api/services/moveYesterdayData.js";
 import pg from 'pg'
 import { topVisitedCitiesInEurope } from "./const.js";
 
@@ -80,31 +81,50 @@ const data = {
 }
 
 const generateTargetReports = async () => {
+    async function fetchCountry(country){
+        console.log('Fetching data from API...', country);
+        const response = await fetch('https://open-weather13.p.rapidapi.com/city/' + country + '/EU', {
+            method: 'GET',
+            headers: {
+                'x-rapidapi-host': process.env.RAPID_APIHOST,
+                'x-rapidapi-key': process.env.RAPID_APIKEY
+            }
+        });
+        if (!response.ok) {
+            throw new Error('Failed to fetch data from API');
+        }
+    
+        const data = await response.json();
+        return data;
+    }
+    async function fetchAndProcessData() {
+        const promisesResult = await Promise.allSettled(
+            topVisitedCitiesInEurope.map(async (country) => {
+                const data = await fetchCountry(country);
+                upsertWeatherData(pool, data)
+                // console.log(data.name);
+            })
+        );
+        return promisesResult;
+    }
+
     try {
         // // Fetch data from API
-        // const response = await fetch('https://open-weather13.p.rapidapi.com/city/Lisbon/EN', {
-        //     method: 'GET',
-        //     headers: {
-        //         'x-rapidapi-host': process.env.RAPID_APIHOST,
-        //         'x-rapidapi-key': process.env.RAPID_APIKEY
-        //     }
-        // });
-        // if (!response.ok) {
-        //     throw new Error('Failed to fetch data from API');
-        // }
-        // const data = await response.json();
-        // // Save data to database
         console.log('Saving data to database...');
-        console.log(data);
+        // console.log(data);
+        // const promisesResult = fetchAndProcessData();
+        moveYesterdayData(pool);
         const promisesResult = Promise.allSettled(topVisitedCitiesInEurope.map((country) =>{ 
-            const data_ = {...data, name: country}
+            const randomTemp = Math.floor(Math.random() * 51) + 50;
+            const data_ = {...data, name: country, main: {...data.main, temp: randomTemp}};
+            console.log(randomTemp, data_);
             upsertWeatherData(pool, data_)
-        }))
+        }));
         if((await promisesResult).find((promise) => promise.status === 'rejected')) {
             throw new Error('Failed to save data to database');
         }
     } catch (apiError) {
-        throw new Error(`Failed to call scheduler endpoint: ${apiError}`);
+        throw new Error(`Failed to call scheduler endpoint:` + apiError);
     }
     console.log('Generating target reports...');
 }

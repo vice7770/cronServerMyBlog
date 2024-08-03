@@ -1,6 +1,6 @@
 
 // Define the insert function
-const insertWeatherData = async (pool, data) => {
+const upsertWeatherData = async (pool, data) => {
     const query = `
         INSERT INTO myblog_weather (name, metadata)
         VALUES ($1, $2)
@@ -17,4 +17,4 @@ const insertWeatherData = async (pool, data) => {
     }
 };
 
-export default insertWeatherData;
+export default upsertWeatherData;

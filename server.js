@@ -9,6 +9,7 @@ import upsertWeatherData from "./api/services/queryWeather.js";
 import moveYesterdayData from "./api/services/moveYesterdayData.js";
 import pg from 'pg'
 import { topVisitedCitiesInEurope } from "./const.js";
+import { fetchWeatherApi } from 'openmeteo';
 
 // No need to edit any of this code
 
@@ -80,49 +81,89 @@ const data = {
     cod: 200
 }
 
+let params = {
+	// "latitude": [38.7167, 48.8534],
+	// "longitude": [-9.1333, 2.3488],
+    "latitude": [],
+    "longitude": [],
+	"current": ["relative_humidity_2m", "rain", "cloud_cover"],
+	"daily": ["weather_code", "temperature_2m_max", "temperature_2m_min", "sunrise", "sunset", "daylight_duration", "uv_index_max", "precipitation_sum", "wind_speed_10m_max"],
+	"past_days": 1,
+	"forecast_days": 1
+};
+
 const generateTargetReports = async () => {
-    async function fetchCountry(country){
-        console.log('Fetching data from API...', country);
-        const response = await fetch('https://open-weather13.p.rapidapi.com/city/' + country + '/EU', {
-            method: 'GET',
-            headers: {
-                'x-rapidapi-host': process.env.RAPID_APIHOST,
-                'x-rapidapi-key': process.env.RAPID_APIKEY
-            }
-        });
-        if (!response.ok) {
-            throw new Error('Failed to fetch data from API');
-        }
-    
-        const data = await response.json();
-        return data;
+    function getWeatherData(countryName, response) {
+        const range = (start, stop, step) =>
+            Array.from({ length: (stop - start) / step }, (_, i) => start + i * step);
+        // Attributes for timezone and location
+        const utcOffsetSeconds = response.utcOffsetSeconds();
+        // const timezone = response.timezone(); 
+        // const timezoneAbbreviation = response.timezoneAbbreviation();
+        // const latitude = response.latitude();
+        // const longitude = response.longitude();
+        const current = response.current();
+        const daily = response.daily();
+
+        // Note: The order of weather variables in the URL query and the indices below need to match
+        const weatherData = {
+            current: {
+                time: new Date((Number(current.time()) + utcOffsetSeconds) * 1000),
+                relativeHumidity2m: current.variables(0).value(),
+                rain: current.variables(1).value(),
+                cloudCover: current.variables(2).value(),
+            },
+            daily: {
+                time: range(Number(daily.time()), Number(daily.timeEnd()), daily.interval()).map(
+                    (t) => new Date((t + utcOffsetSeconds) * 1000)
+                ),
+                temperature2mMax: daily.variables(0).valuesArray(),
+                temperature2mMin: daily.variables(1).valuesArray(),
+                sunrise: daily.variables(2).valuesArray(),
+                sunset: daily.variables(3).valuesArray(),
+                daylightDuration: daily.variables(4).valuesArray(),
+                uvIndexMax: daily.variables(5).valuesArray(),
+                precipitationSum: daily.variables(6).valuesArray(),
+                windSpeed10mMax: daily.variables(7).valuesArray(),
+                weatherCode: daily.variables(8).valuesArray(),
+            },
+        };
+        // console.log(weatherData);
+        // console.log(countryName, weatherData);
+        return {name: countryName,metaData: weatherData};
     }
-    async function fetchAndProcessData() {
-        const promisesResult = await Promise.allSettled(
-            topVisitedCitiesInEurope.map(async (country) => {
-                const data = await fetchCountry(country);
-                upsertWeatherData(pool, data)
-                // console.log(data.name);
-            })
-        );
-        return promisesResult;
+
+    async function fetchCountry(params){
+        const url = "https://api.open-meteo.com/v1/forecast";
+        const responses = await fetchWeatherApi(url, params);
+        // Helper function to form time ranges
+        // if (!responses.ok) {
+        //     throw new Error('Failed to fetch data from API');
+        // }
+        const weatherData = responses.map((response, index) => getWeatherData(topVisitedCitiesInEurope[index].name,response));
+        return weatherData;
     }
 
     try {
         // // Fetch data from API
         console.log('Saving data to database...');
         // console.log(data);
-        // const promisesResult = fetchAndProcessData();
-        moveYesterdayData(pool);
-        const promisesResult = Promise.allSettled(topVisitedCitiesInEurope.map((country) =>{ 
-            const randomTemp = Math.floor(Math.random() * 51) + 50;
-            const data_ = {...data, name: country, main: {...data.main, temp: randomTemp}};
-            console.log(randomTemp, data_);
-            upsertWeatherData(pool, data_)
-        }));
-        if((await promisesResult).find((promise) => promise.status === 'rejected')) {
-            throw new Error('Failed to save data to database');
-        }
+        const latitude = topVisitedCitiesInEurope.map((city) => city.coordinates.lat);
+        const longitude = topVisitedCitiesInEurope.map((city) => city.coordinates.lon);
+        const params_ = {...params, latitude: latitude, longitude: longitude};
+        const weather = await fetchCountry(params_);
+        // console.log(weather);
+        // moveYesterdayData(pool);
+        // const promisesResult = Promise.allSettled(topVisitedCitiesInEurope.map((country) =>{ 
+        //     const randomTemp = Math.floor(Math.random() * 51) + 50;
+        //     const data_ = {...data, name: country, main: {...data.main, temp: randomTemp}};
+        //     console.log(randomTemp, data_);
+        //     upsertWeatherData(pool, data_)
+        // }));
+        weather.map((city) => upsertWeatherData(pool, city))
+        // if((await promisesResult).find((promise) => promise.status === 'rejected')) {
+        //     throw new Error('Failed to save data to database');
+        // }
     } catch (apiError) {
         throw new Error(`Failed to call scheduler endpoint:` + apiError);
     }
@@ -131,7 +172,6 @@ const generateTargetReports = async () => {
 
 // Scheduler
 const runScheduler = async () => {
-    console.log('Starting scheduler...', process.env.RAPID_APIHOST);
     generateTargetReports();
     cron.schedule('0 5 * * *', generateTargetReports);
 };

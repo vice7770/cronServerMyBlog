@@ -7,7 +7,7 @@ const upsertWeatherData = async (pool, data) => {
         ON CONFLICT (name)
         DO UPDATE SET metadata = EXCLUDED.metadata;
     `;
-    const values = [data.name, data];
+    const values = [data.name, data.metadata];
 
     try {
         await pool.query(query, values);

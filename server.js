@@ -130,7 +130,7 @@ const generateTargetReports = async () => {
         };
         // console.log(weatherData);
         // console.log(countryName, weatherData);
-        return {name: countryName,metaData: weatherData};
+        return {name: countryName,metadata: weatherData};
     }
 
     async function fetchCountry(params){

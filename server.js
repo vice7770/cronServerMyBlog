@@ -86,9 +86,10 @@ let params = {
 	// "longitude": [-9.1333, 2.3488],
     "latitude": [],
     "longitude": [],
-	"current": ["relative_humidity_2m", "rain", "cloud_cover"],
+	"current": ["temperature_2m","relative_humidity_2m", "precipitation", "rain", "cloud_cover"],
 	"daily": ["weather_code", "temperature_2m_max", "temperature_2m_min", "sunrise", "sunset", "daylight_duration", "uv_index_max", "precipitation_sum", "wind_speed_10m_max"],
-	"past_days": 1,
+	"hourly": "precipitation",
+    "past_days": 1,
 	"forecast_days": 1
 };
 
@@ -104,12 +105,14 @@ const generateTargetReports = async () => {
         // const longitude = response.longitude();
         const current = response.current();
         const daily = response.daily();
-
+        const hourly = response.hourly();
         // Note: The order of weather variables in the URL query and the indices below need to match
         const weatherData = {
             current: {
+                temperature2m: current.variables(0).value(),
                 time: new Date((Number(current.time()) + utcOffsetSeconds) * 1000),
                 relativeHumidity2m: current.variables(0).value(),
+                precipitation: current.variables(2).value(),
                 rain: current.variables(1).value(),
                 cloudCover: current.variables(2).value(),
             },
@@ -126,6 +129,12 @@ const generateTargetReports = async () => {
                 precipitationSum: daily.variables(6).valuesArray(),
                 windSpeed10mMax: daily.variables(7).valuesArray(),
                 weatherCode: daily.variables(8).valuesArray(),
+            },
+            hourly: {
+                time: range(Number(hourly.time()), Number(hourly.timeEnd()), hourly.interval()).map(
+                    (t) => new Date((t + utcOffsetSeconds) * 1000)
+                ),
+                precipitation: hourly.variables(0).valuesArray(),
             },
         };
         // console.log(weatherData);

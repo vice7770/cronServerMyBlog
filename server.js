@@ -6,7 +6,7 @@ import path from "path";
 import cron from 'node-cron';
 import initializeDb from "./api/services/weather.js";
 import upsertWeatherData from "./api/services/queryWeather.js";
-import moveYesterdayData from "./api/services/moveYesterdayData.js";
+import upsertWeatherPrev2MonthsData from "./api/services/queryPrev2Months.js";
 import pg from 'pg'
 import { topVisitedCitiesInEurope } from "./const.js";
 import { fetchWeatherApi } from 'openmeteo';
@@ -81,19 +81,18 @@ const data = {
     cod: 200
 }
 
-let params = {
-	// "latitude": [38.7167, 48.8534],
-	// "longitude": [-9.1333, 2.3488],
-    "latitude": [],
-    "longitude": [],
-	"current": ["temperature_2m","relative_humidity_2m", "precipitation", "rain", "cloud_cover", "wind_speed_10m"],
-	"daily": ["temperature_2m_max", "temperature_2m_min", "sunrise", "sunset", "daylight_duration", "uv_index_max", "precipitation_sum", "wind_speed_10m_max", "wind_speed_10m_min"],
-	"hourly": ["precipitation", "cloud_cover"],
-    "past_days": 1,
-	"forecast_days": 1
-};
-
 const generateTargetReports = async () => {
+    const params = {
+        // "latitude": [38.7167, 48.8534],
+        // "longitude": [-9.1333, 2.3488],
+        "latitude": [],
+        "longitude": [],
+        "current": ["temperature_2m","relative_humidity_2m", "precipitation", "rain", "cloud_cover", "wind_speed_10m"],
+        "daily": ["temperature_2m_max", "temperature_2m_min", "sunrise", "sunset", "daylight_duration", "uv_index_max", "precipitation_sum", "wind_speed_10m_max", "wind_speed_10m_min"],
+        "hourly": ["precipitation", "cloud_cover"],
+        "past_days": 1,
+        "forecast_days": 1
+    };
     function getWeatherData(countryName, response) {
         const range = (start, stop, step) =>
             Array.from({ length: (stop - start) / step }, (_, i) => start + i * step);
@@ -140,8 +139,6 @@ const generateTargetReports = async () => {
                 rain: hourly.variables(0).valuesArray(),
             },
         };
-        // console.log(weatherData);
-        // console.log(countryName, weatherData);
         return {name: countryName,metadata: weatherData};
     }
 
@@ -182,10 +179,68 @@ const generateTargetReports = async () => {
     console.log('Generating target reports...');
 }
 
+const generateLast2monthsReports = async () => {
+    const params = {
+        "latitude": 48.8534,
+        "longitude": 2.3488,
+        "daily": "temperature_2m_max",
+        "past_days": 61,
+        "forecast_days": 1
+    };
+    function getWeatherData(countryName, response) {
+        const range = (start, stop, step) =>
+            Array.from({ length: (stop - start) / step }, (_, i) => start + i * step);
+        // Process first location. Add a for-loop for multiple locations or weather models
+        // Attributes for timezone and location
+        const utcOffsetSeconds = response.utcOffsetSeconds();
+
+        const daily = response.daily();
+        // Note: The order of weather variables in the URL query and the indices below need to match
+        const weatherData = {
+            daily: {
+                time: range(Number(daily.time()), Number(daily.timeEnd()), daily.interval()).map(
+                    (t) => new Date((t + utcOffsetSeconds) * 1000)
+                ),
+                temperature2mMax: daily.variables(0).valuesArray(),
+            },
+        };
+        // console.log(weatherData);
+        // console.log(countryName, weatherData);
+        return {name: countryName,metadata: weatherData};
+    }
+
+    async function fetchCountry(params){
+        const url = "https://api.open-meteo.com/v1/forecast";
+        const responses = await fetchWeatherApi(url, params);
+        // Helper function to form time ranges
+        // if (!responses.ok) {
+        //     throw new Error('Failed to fetch data from API');
+        // }
+        const weatherData = responses.map((response, index) => getWeatherData(topVisitedCitiesInEurope[index].name,response));
+        return weatherData;
+    }
+
+    try {
+        // // Fetch data from API
+        console.log('Saving data to database...');
+        // console.log(data);
+        const latitude = topVisitedCitiesInEurope.map((city) => city.coordinates.lat);
+        const longitude = topVisitedCitiesInEurope.map((city) => city.coordinates.lon);
+        const params_ = {...params, latitude: latitude, longitude: longitude};
+        const weather = await fetchCountry(params_);
+        weather.map((city) => upsertWeatherPrev2MonthsData(pool, city))
+    } catch (apiError) {
+        throw new Error(`Failed to call scheduler endpoint:` + apiError);
+    }
+    console.log('Generating target reports...');
+}
+
 // Scheduler
 const runScheduler = async () => {
     generateTargetReports();
     cron.schedule('0 * * * *', generateTargetReports);
+    // generateLast2monthsReports();
+    // cron.schedule('0 0 * * *', generateLast2monthsReports);
 };
 
 const PORT = process.env.PORT || 8080;

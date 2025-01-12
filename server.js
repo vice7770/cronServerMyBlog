@@ -12,7 +12,7 @@ import { topVisitedCitiesInEurope } from "./const.js";
 import { fetchWeatherApi } from 'openmeteo';
 
 // No need to edit any of this code
-
+const express = require('express');
 const app = express();
 const server = http.Server(app);
 const { Pool } = pg;
@@ -245,14 +245,17 @@ const runScheduler = async () => {
     cron.schedule('0 0 * * *', generateLast2monthsReports);
 };
 
+const PORT = process.env.PORT || 8080;
+server.listen(PORT, () => {
+  console.log(`Server listening at http://localhost:${PORT}`);
+  runScheduler();
+});
+
 app.get('/', (req, res) => {
     res.status(200).json('Welcome, your app is working well');
 });
 app.get('/home', (req, res) => {
     res.status(200).json('Welcome, your app is working well. Home page');
 });
-const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => {
-  console.log(`Server listening at http://localhost:${PORT}`);
-  runScheduler();
-});
+
+export default app;

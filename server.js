@@ -87,8 +87,8 @@ const generateTargetReports = async () => {
         // "longitude": [-9.1333, 2.3488],
         "latitude": [],
         "longitude": [],
-        "current": ["temperature_2m","relative_humidity_2m", "precipitation", "rain", "cloud_cover", "wind_speed_10m"],
-        "daily": ["temperature_2m_max", "temperature_2m_min", "sunrise", "sunset", "daylight_duration", "uv_index_max", "precipitation_sum", "wind_speed_10m_max", "wind_speed_10m_min"],
+        "current": ["temperature_2m","relative_humidity_2m", "precipitation", "rain", "cloud_cover", "wind_speed_10m", "is_day"],
+        "daily": ["temperature_2m_max", "temperature_2m_min", "sunrise", "sunset", "daylight_duration", "uv_index_max", "precipitation_sum", "wind_speed_10m_max", "wind_speed_10m_min" ],
         "hourly": ["precipitation", "cloud_cover"],
         "past_days": 1,
         "forecast_days": 1
@@ -119,8 +119,9 @@ const generateTargetReports = async () => {
                 rain: current.variables(3).value(),
                 cloudCover: current.variables(4).value(),
                 windSpeed10m: current.variables(5).value(),
+                isDay: current.variables(6).value()
             },
-                daily: {
+            daily: {
                 time: range(Number(daily.time()), Number(daily.timeEnd()), daily.interval()).map(
                     (t) => new Date((t + utcOffsetSeconds) * 1000)
                 ),
@@ -139,6 +140,7 @@ const generateTargetReports = async () => {
                 rain: hourly.variables(0).valuesArray(),
             },
         };
+        
         return {name: countryName,metadata: weatherData};
     }
 
@@ -239,10 +241,13 @@ const generateLast2monthsReports = async () => {
 const runScheduler = async () => {
     generateTargetReports();
     cron.schedule('0 * * * *', generateTargetReports);
-    // generateLast2monthsReports();
-    // cron.schedule('0 0 * * *', generateLast2monthsReports);
+    generateLast2monthsReports();
+    cron.schedule('0 0 * * *', generateLast2monthsReports);
 };
 
+app.get('/', (req, res) => {
+    res.status(200).json('Welcome, your app is working well');
+});
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
   console.log(`Server listening at http://localhost:${PORT}`);

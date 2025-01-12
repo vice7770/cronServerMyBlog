@@ -12,7 +12,6 @@ import { topVisitedCitiesInEurope } from "./const.js";
 import { fetchWeatherApi } from 'openmeteo';
 
 // No need to edit any of this code
-const express = require('express');
 const app = express();
 const server = http.Server(app);
 const { Pool } = pg;

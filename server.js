@@ -248,6 +248,9 @@ const runScheduler = async () => {
 app.get('/', (req, res) => {
     res.status(200).json('Welcome, your app is working well');
 });
+app.get('/home', (req, res) => {
+    res.status(200).json('Welcome, your app is working well. Home page');
+});
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
   console.log(`Server listening at http://localhost:${PORT}`);
